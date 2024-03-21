@@ -797,7 +797,9 @@ function _runServer(argv) {
         ...(req.body.statusDetail ? { statusDetail: req.body.statusDetail } : {}),
       };
       authOptions.getPostURL = function (req, callback) {
-        callback(null, req.idp.options.acsUrl);
+        callback(null, (req.authnRequest && req.authnRequest.acsUrl) ?
+          req.authnRequest.acsUrl :
+          req.idp.options.acsUrl);
       };
       samlp.sendError(authOptions)(req, res);  
     }
