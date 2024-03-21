@@ -21,7 +21,7 @@ const addSamlError = () => {
   editFile(responseTemplatePath, (src) => {
     let edit = src;
     edit = edit.replaceAll('<samlp:StatusCode Value="<%= samlStatusCode %>"/>', '<% if (samlNestedStatusCode) { %><samlp:StatusCode Value="<%= samlStatusCode %>"><samlp:StatusCode Value="<%= samlNestedStatusCode %>"/></samlp:StatusCode><% } else { %><samlp:StatusCode Value="<%= samlStatusCode %>"/><% } %>');
-    edit = edit.replaceAll('<% if (samlStatusMessage) { %><samlp:StatusMessage Value="<%= samlStatusMessage %>"/><% } %>', '<% if (samlStatusMessage) { %><samlp:StatusMessage Value="<%= samlStatusMessage %>"/><% } %><% if (samlStatusDetail) { %><samlp:StatusDetail Value="<%= samlStatusDetail %>"/><% } %>');
+    edit = edit.replaceAll('<% if (samlStatusMessage) { %><samlp:StatusMessage Value="<%= samlStatusMessage %>"/><% } %>', '<% if (samlStatusMessage) { %><samlp:StatusMessage><%= samlStatusMessage %></samlp:StatusMessage><% } %><% if (samlStatusDetail) { %><samlp:StatusDetail><%= samlStatusDetail %></samlp:StatusDetail><% } %>');
     return edit;
   });
   

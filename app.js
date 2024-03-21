@@ -792,7 +792,9 @@ function _runServer(argv) {
     } else {
       authOptions.error = {
         statusCode: `urn:oasis:names:tc:SAML:2.0:status:${req.body.statusCode}`,
-        ...(req.body.nestedStatusCode ? { nestedStatusCode: req.body.nestedStatusCode } : {}),
+        ...(req.body.nestedStatusCode ?
+          { nestedStatusCode: `urn:oasis:names:tc:SAML:2.0:status:${req.body.nestedStatusCode}` } :
+          {}),
         ...(req.body.statusMessage ? { statusMessage: req.body.statusMessage } : {}),
         ...(req.body.statusDetail ? { statusDetail: req.body.statusDetail } : {}),
       };
