@@ -22,6 +22,8 @@ const chalk               = require('chalk'),
       SessionParticipants = require('samlp/lib/sessionParticipants'),
       SimpleProfileMapper = require('./lib/simpleProfileMapper.js');
 
+const jwt = require("jsonwebtoken");
+
 /**
  * Globals
  */
@@ -32,7 +34,13 @@ const IDP_PATHS = {
   METADATA: '/metadata',
   SIGN_IN: '/signin',
   SIGN_OUT: '/signout',
-  SETTINGS: '/settings'
+  SETTINGS: '/settings',
+  SET_SAVED_USER: '/setuser',
+  UPDATE_USER: '/updateuser',
+  GET_USER: '/getuser',
+  CLEAR_USER: '/clearuser',
+  CREATE_TOKEN: '/createtoken',
+  VERIFY_TOKEN: '/verifytoken'
 }
 const CERT_OPTIONS = [
   'cert',
@@ -193,6 +201,10 @@ function processArgs(args, options) {
         default: './idp-public-cert.pem',
         coerce: makeCertFileCoercer('certificate', 'IdP Signature PublicKey Certificate', KEY_CERT_HELP_TEXT)
       },
+      dataDir: {
+        description: 'Data Directory',
+        required: true
+      },
       key: {
         description: 'IdP Signature PrivateKey Certificate',
         required: true,
@@ -315,6 +327,21 @@ function processArgs(args, options) {
             return fs.readFileSync(filePath, 'utf8')
           }
         }
+      },
+      lifetimeInSeconds: {
+        description: 'NotOnOrAfter Seconds',
+        required: false,
+        default: 60 * 60, // 1時間
+      },
+      isEnableToken: {
+        description: 'Token Enable Flag',
+        required: false,
+        default: false,
+      },
+      tokenExpires: {
+        description: 'Token Expires Seconds',
+        required: false,
+        default: 60 * 60, // 1時間
       }
     })
     .example('$0 --acsUrl http://acme.okta.com/auth/saml20/exampleidp --audience https://www.okta.com/saml2/service-provider/spf5aFRRXFGIMAYXQPNV', '')
@@ -343,6 +370,28 @@ function processArgs(args, options) {
       } catch (error) {
         return 'Encountered an exception while loading SAML attribute config file "' + configFilePath + '".\n' + error;
       }
+      return true;
+    })
+    .check(function(argv, aliases) {
+      const dataDir = resolveDataDir(argv.dataDir, '');
+      if (!fs.existsSync(dataDir)) {
+        return 'Data Directory "' + resolveDataDir(argv.dataDir, '') + '" is not exist.\n'
+      }
+      return true;
+    })
+    .check(function(argv, aliases) {
+      if (!Number.isInteger(argv.lifetimeInSeconds)) {
+        return 'NotOnOrAfter Seconds "' + argv.lifetimeInSeconds + '" is not integer.\n';
+      }
+      argv.lifetimeInSeconds = Number(argv.lifetimeInSeconds);
+      if (argv.isEnableToken !== 'true' && argv.isEnableToken !== 'false') {
+        return 'Token Enable Flag "' + argv.isEnableToken + '" is not string of boolean[true|false].\n';
+      }
+      argv.isEnableToken = argv.isEnableToken === 'true' ? true : false;
+      if (!Number.isInteger(argv.tokenExpires)) {
+        return 'Token Expires Seconds "' + argv.tokenExpires + '" is not integer.\n';
+      }
+      argv.tokenExpires = Number(argv.tokenExpires);
       return true;
     })
     .wrap(baseArgv.terminalWidth());
@@ -415,7 +464,7 @@ function _runServer(argv) {
     encryptionPublicKey:    argv.encryptionPublicKey,
     encryptionAlgorithm:    'http://www.w3.org/2001/04/xmlenc#aes256-cbc',
     keyEncryptionAlgorithm: 'http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p',
-    lifetimeInSeconds:      3600,
+    lifetimeInSeconds:      argv.lifetimeInSeconds,
     authnContextClassRef:   argv.authnContextClassRef,
     authnContextDecl:       argv.authnContextDecl,
     includeAttributeNameFormat: true,
@@ -524,6 +573,7 @@ function _runServer(argv) {
         return req.path.startsWith('/bower_components') || req.path.startsWith('/css')
       }
   }));
+  app.use(express.json());
   app.use(bodyParser.urlencoded({extended: true}));
   app.use(express.static(path.join(__dirname, 'public')));
   app.use(session({
@@ -572,8 +622,41 @@ function _runServer(argv) {
         };
         console.log('Received AuthnRequest => \n', req.authnRequest);
       }
+
+      // Set saved user
+      const savedUser = getSavedUser(argv.dataDir, req.user);
+      if (savedUser) {
+        console.log(`Set saved user`);
+        req.user = savedUser;
+      }
+
       return showUser(req, res, next);
     })
+  };
+
+  const verifyAccessToken = async function(req, res, next) {
+    if (argv.isEnableToken) {
+      const authHeader = req.headers["authorization"];
+      if (authHeader) {
+        if (authHeader.split(" ")[0] === "Bearer") {
+          const token = authHeader.split(" ")[1];
+          try {
+            const decodedToken = await verifyToken(argv.key, token);
+            res.locals.decodedToken = decodedToken;
+            next();
+          } catch (err) {
+            res.status(401).end();
+          }
+        } else {
+          res.status(401).end();
+        }
+      } else {
+        res.status(401).end();
+      }  
+    } else {
+      res.locals.decodedToken = 'none';
+      next();
+    }
   };
 
   const getSessionIndex = function(req) {
@@ -667,9 +750,18 @@ function _runServer(argv) {
           authOptions.RelayState = req.authnRequest.relayState;
         }
       } else {
-        req.user[key] = req.body[key];
+        const excludes = ['statusCode', 'nestedStatusCode', 'statusMessage', 'statusDetail'];
+        if (!excludes.includes(key)) {
+          req.user[key] = req.body[key];
+        }
       }
     });
+
+    // Save user
+    // req.user.loginDate = new Date();
+    if (req.body.statusCode === 'Success') {
+      saveUser(argv.dataDir, req.user);
+    }
 
     if (!authOptions.encryptAssertion) {
       delete authOptions.encryptionCert;
@@ -689,7 +781,26 @@ function _runServer(argv) {
           ${key}: {cyan ${formatOptionValue(key, value)}}`
         ).join('')}
     `));
-    samlp.auth(authOptions)(req, res);
+    if (req.body.statusCode === 'Success') {
+      if (req.body.statusMessage) {
+        authOptions.samlStatusMessage = req.body.statusMessage;
+      }
+      if (req.body.statusDetail) {
+        authOptions.samlStatusDetail = req.body.statusDetail;
+      }
+      samlp.auth(authOptions)(req, res);
+    } else {
+      authOptions.error = {
+        statusCode: `urn:oasis:names:tc:SAML:2.0:status:${req.body.statusCode}`,
+        ...(req.body.nestedStatusCode ? { nestedStatusCode: req.body.nestedStatusCode } : {}),
+        ...(req.body.statusMessage ? { statusMessage: req.body.statusMessage } : {}),
+        ...(req.body.statusDetail ? { statusDetail: req.body.statusDetail } : {}),
+      };
+      authOptions.getPostURL = function (req, callback) {
+        callback(null, req.idp.options.acsUrl);
+      };
+      samlp.sendError(authOptions)(req, res);  
+    }
   })
 
   app.get(IDP_PATHS.METADATA, function(req, res, next) {
@@ -767,6 +878,95 @@ function _runServer(argv) {
     res.redirect('/');
   });
 
+  app.post(IDP_PATHS.SET_SAVED_USER, function(req, res, next) {
+    if (req.body && req.body.userName) {
+      const savedUser = getSavedUser(argv.dataDir, { userName: req.body.userName });
+      if (savedUser) {
+        console.log('Set saved user');
+        req.user = savedUser;
+        res.status(200).end();
+      } else {
+        res.status(404).end();
+      }
+    } else {
+      res.status(404).end();
+    }
+  });
+
+  app.post(IDP_PATHS.UPDATE_USER, verifyAccessToken, function(req, res, next) {
+    console.log('/updateuser', req.body);
+    if (req.body && req.body.userName && (req.body.appUserId1 || req.body.appUserId2)) {
+      const savedUser = getSavedUser(argv.dataDir, { userName: req.body.userName });
+      if (savedUser) {
+        if (req.body.appUserId1) {
+          savedUser.appUserId1 = req.body.appUserId1;
+        }
+        if (req.body.appUserId2) {
+          savedUser.appUserId2 = req.body.appUserId2;
+        }
+        saveUser(argv.dataDir, savedUser);
+        console.log('Update user');
+        res.status(200).json({ success: true });
+      } else {
+        res.status(404).end();
+      }
+    } else {
+      res.status(404).end();
+    }
+  });
+
+  app.get(IDP_PATHS.GET_USER, verifyAccessToken, function(req, res, next) {
+    console.log('/getuser', req.query);
+    if (req.query) {
+      if (req.query.userName) {
+        const savedUser = getSavedUser(argv.dataDir, { userName: req.query.userName });
+        if (savedUser) {
+          console.log('Get user');
+          res.status(200).json(savedUser);
+        } else {
+          res.status(404).end();
+        }
+      } else if (req.query.appUserId1) {
+        const savedUser = getSavedUserOfAppUserId1(argv.dataDir, req.query.appUserId1);
+        if (savedUser) {
+          console.log('Get user');
+          res.status(200).json(savedUser);
+        } else {
+          res.status(404).end();
+        }
+      } else if (req.query.appUserId2) {
+        const savedUser = getSavedUserOfAppUserId2(argv.dataDir, req.query.appUserId2);
+        if (savedUser) {
+          console.log('Get user');
+          res.status(200).json(savedUser);
+        } else {
+          res.status(404).end();
+        }
+      } else {
+        res.status(404).end();
+      }
+    } else {
+      res.status(404).end();
+    }
+  });
+
+  app.get(IDP_PATHS.CLEAR_USER, verifyAccessToken, function(req, res, next) {
+    console.log('/clearuser');
+    clearSaveUser(argv.dataDir);
+    res.status(200).json({ success: true });
+  });
+
+  app.get([IDP_PATHS.CREATE_TOKEN], function(req, res, next) {
+    console.log('/createtoken expires', argv.tokenExpires);
+    const token = createToken(argv.key, argv.tokenExpires);
+    res.status(200).json({ token });
+  });
+
+  app.post([IDP_PATHS.VERIFY_TOKEN], verifyAccessToken, function(req, res, next) {
+    console.log('/verifytoken');
+    res.status(200).json({ token: res.locals.decodedToken });
+  });
+
   // catch 404 and forward to error handler
   app.use(function(req, res, next) {
     const err = new Error('Route Not Found');
@@ -828,6 +1028,91 @@ function runServer(options) {
 function main () {
   const args = processArgs(process.argv.slice(2));
   _runServer(args.argv);
+}
+
+function saveUser(dir, user) {
+  const filepath = resolveDataDir(dir, `${user.userName}.json`);
+  fs.writeFileSync(filepath, JSON.stringify(user));
+}
+
+function getSavedUser(dir, user) {
+  const filepath = resolveDataDir(dir, `${user.userName}.json`);
+  if (fs.existsSync(filepath)) {
+    return JSON.parse(fs.readFileSync(filepath));
+  }
+  return null;
+}
+
+function getSavedUserOfAppUserId1(dir, appUserId1) {
+  const filepath = resolveDataDir(dir, '');
+  const users = fs.readdirSync(filepath);
+  for (const user of users) {
+    if (user.startsWith('.')) {
+      continue;
+    }
+    const savedUser = JSON.parse(fs.readFileSync(path.join(filepath, user)));
+    if (appUserId1 === savedUser.appUserId1) {
+      return savedUser;
+    }
+  }
+  return null;
+}
+
+function getSavedUserOfAppUserId2(dir, appUserId2) {
+  const filepath = resolveDataDir(dir, '');
+  const users = fs.readdirSync(filepath);
+  for (const user of users) {
+    if (user.startsWith('.')) {
+      continue;
+    }
+    const savedUser = JSON.parse(fs.readFileSync(path.join(filepath, user)));
+    if (appUserId2 === savedUser.appUserId2) {
+      return savedUser;
+    }
+  }
+  return null;
+}
+
+function clearSaveUser(dir) {
+  const filepath = resolveDataDir(dir, '');
+  const users = fs.readdirSync(filepath);
+  for (const user of users) {
+    if (user.startsWith('.')) {
+      continue;
+    }
+    fs.unlinkSync(path.join(filepath, user));
+  }
+}
+
+function resolveDataDir(dir, file) {
+  if (path.isAbsolute(dir)) {
+    return path.join(dir, file);
+  }
+  const pwd = process.env.INIT_CWD;
+  return path.join(pwd, dir, file);
+}
+
+function createToken(privateKey, seconds) {
+  const token = jwt.sign(
+    {
+      exp: Math.floor(Date.now() / 1000) + seconds,
+    },
+    privateKey,
+    { algorithm: "RS256" }
+  );
+  return token;
+}
+
+async function verifyToken(key, token) {
+  return new Promise(function (resolve, reject) {
+    jwt.verify(token, key, function (err, decoded) {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(decoded);
+    });
+  });
 }
 
 module.exports = {

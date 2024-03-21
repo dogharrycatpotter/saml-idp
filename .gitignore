@@ -114,3 +114,7 @@ $RECYCLE.BIN/
 
 idp-private-key.pem
 idp-public-cert.pem
+
+# Custom
+/data/*
+!/data/.gitkeep

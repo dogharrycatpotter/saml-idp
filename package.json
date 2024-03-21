@@ -20,13 +20,20 @@
   },
   "main": "./app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "test:setup:samlp": "./bin/setup.js samlp",
+    "test:setup:samlp2": "./bin/setup.js samlp2",
+    "test:start": "npm run start -- --dataDir ./data --port 7000 --acs http://localhost:7000/auth/saml --aud mock-audience --cert=./idp-public-cert.pem --key=./idp-private-key.pem --lifetimeInSeconds 300 --isEnableToken true --tokenExpires 3600"
   },
-  "bin": "./bin/run.js",
+  "bin": {
+    "saml-idp-setup": "./bin/setup.js",
+    "saml-idp-start": "./bin/run.js"
+  },
   "engines": {
     "node": ">=12.0.0"
   },
   "dependencies": {
+    "@xmldom/xmldom": "^0.8.2",
     "body-parser": "~1.20.0",
     "chalk": "^4.0.0",
     "debug": "~4.3.4",
@@ -34,10 +41,10 @@
     "express-session": "^1.17.3",
     "extend": "^3.0.2",
     "hbs": "^4.2.0",
+    "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "samlp": "github:mcguinness/node-samlp",
     "xml-formatter": "^2.6.1",
-    "@xmldom/xmldom": "^0.8.2",
     "yargs": "^17.5.1"
   }
 }
