@@ -11,7 +11,8 @@ var profile = {
   // displayName: 'saml jackson',
   // mobilePhone: '+1-415-555-5141',
   // groups: 'Simple IdP Users, West Coast Users, Cloud Users',
-  appUserId1: '',
+  customerId: '',
+  // appUserId1: '',
   // appUserId2: '',
   // loginDate: '',
 }
@@ -70,12 +71,19 @@ var metadata = [
 //   options: ['Admin', 'Editor', 'Commenter']
 // },
 {
-  id: "appUserId1",
+  id: "customerId",
   optional: true,
-  displayName: 'Application User Id 1',
-  description: 'SP Application User Id 1',
+  displayName: 'Application Customer Id',
+  description: 'SP Application Customer Id',
   multiValue: false
 },
+// {
+//   id: "appUserId1",
+//   optional: true,
+//   displayName: 'Application User Id 1',
+//   description: 'SP Application User Id 1',
+//   multiValue: false
+// },
 // {
 //   id: "appUserId2",
 //   optional: true,

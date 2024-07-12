@@ -899,9 +899,12 @@ function _runServer(argv) {
 
   app.post(IDP_PATHS.UPDATE_USER, verifyAccessToken, function(req, res, next) {
     console.log('/updateuser', req.body);
-    if (req.body && req.body.userName && (req.body.appUserId1 || req.body.appUserId2)) {
+    if (req.body && req.body.userName && (req.body.customerId || req.body.appUserId1 || req.body.appUserId2)) {
       const savedUser = getSavedUser(argv.dataDir, { userName: req.body.userName });
       if (savedUser) {
+        if (req.body.customerId) {
+          savedUser.customerId = req.body.customerId;
+        }
         if (req.body.appUserId1) {
           savedUser.appUserId1 = req.body.appUserId1;
         }
@@ -924,6 +927,14 @@ function _runServer(argv) {
     if (req.query) {
       if (req.query.userName) {
         const savedUser = getSavedUser(argv.dataDir, { userName: req.query.userName });
+        if (savedUser) {
+          console.log('Get user');
+          res.status(200).json(savedUser);
+        } else {
+          res.status(404).end();
+        }
+      } else if (req.query.customerId) {
+        const savedUser = getSavedUserOfCustomerId(argv.dataDir, req.query.customerId);
         if (savedUser) {
           console.log('Get user');
           res.status(200).json(savedUser);
@@ -1047,6 +1058,21 @@ function getSavedUser(dir, user) {
   return null;
 }
 
+function getSavedUserOfCustomerId(dir, customerId) {
+  const filepath = resolveDataDir(dir, '');
+  const users = fs.readdirSync(filepath);
+  for (const user of users) {
+    if (user.startsWith('.')) {
+      continue;
+    }
+    const savedUser = JSON.parse(fs.readFileSync(path.join(filepath, user)));
+    if (customerId === savedUser.customerId) {
+        return savedUser;
+    }
+  }
+  return null;
+}
+
 function getSavedUserOfAppUserId1(dir, appUserId1) {
   const filepath = resolveDataDir(dir, '');
   const users = fs.readdirSync(filepath);
@@ -1056,7 +1082,7 @@ function getSavedUserOfAppUserId1(dir, appUserId1) {
     }
     const savedUser = JSON.parse(fs.readFileSync(path.join(filepath, user)));
     if (appUserId1 === savedUser.appUserId1) {
-      return savedUser;
+        return savedUser;
     }
   }
   return null;

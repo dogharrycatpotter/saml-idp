@@ -249,7 +249,8 @@ $(document).ready(function() {
        error: function(xhr, textStatus, errorMessage) {
          console.log(errorMessage);
          $('#modal-set-error').modal('show');
-         $('#appUserId1').val('');
+         $('#customerId').val('');
+         {{!-- $('#appUserId1').val(''); --}}
          {{!-- $('#appUserId2').val(''); --}}
          {{!-- $('#loginDate').val(''); --}}
        }
