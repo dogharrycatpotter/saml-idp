@@ -666,12 +666,17 @@ function _runServer(argv) {
   }
 
   const getParticipant = function(req) {
+    let serviceProviderLogoutURL = req.idp.options.sloUrl;
+    const referer = req.headers.referer;
+    if (referer) {
+      serviceProviderLogoutURL = new URL(referer).origin + new URL(serviceProviderLogoutURL).pathname;
+    }
     return {
       serviceProviderId: req.idp.options.serviceProviderId,
       sessionIndex: getSessionIndex(req),
       nameId: req.user.userName,
       nameIdFormat: req.user.nameIdFormat,
-      serviceProviderLogoutURL: req.idp.options.sloUrl
+      serviceProviderLogoutURL
     }
   }
 
@@ -690,6 +695,7 @@ function _runServer(argv) {
       key:                    req.idp.options.key,
       digestAlgorithm:        req.idp.options.digestAlgorithm,
       signatureAlgorithm:     req.idp.options.signatureAlgorithm,
+      ...(req.method === 'GET' ? {protocolBinding: 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect', deflate: true } : {}),
       sessionParticipants:    new SessionParticipants(
       [
         req.participant

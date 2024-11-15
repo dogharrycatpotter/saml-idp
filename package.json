@@ -23,7 +23,7 @@
     "start": "node app.js",
     "test:setup:samlp": "./bin/setup.js samlp",
     "test:setup:samlp2": "./bin/setup.js samlp2",
-    "test:start": "npm run start -- --dataDir ./data --port 7000 --acs http://localhost:7000/auth/saml --aud mock-audience --cert=./idp-public-cert.pem --key=./idp-private-key.pem --lifetimeInSeconds 300 --isEnableToken true --tokenExpires 3600"
+    "test:start": "npm run start -- --dataDir ./data --port 7000 --acs http://localhost:7000/auth/saml --slo http://localhost:3000/saml/slo/response --aud mock-audience --cert=./idp-public-cert.pem --key=./idp-private-key.pem --lifetimeInSeconds 300 --isEnableToken true --tokenExpires 3600"
   },
   "bin": {
     "saml-idp-setup": "./bin/setup.js",

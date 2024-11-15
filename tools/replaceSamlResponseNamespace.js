@@ -15,10 +15,12 @@ const replaceForSamlp = () => {
 
   const assertionTemplatePath = path.join('node_modules', 'saml', 'lib', 'saml20.template');
   const responseTemplatePath = path.join('node_modules', 'samlp', 'templates', 'samlresponse.ejs');
+  const logoutResponseTemplatePath = path.join('node_modules', 'samlp', 'templates', 'logoutresponse.ejs');
   const saml20LogicPath = path.join('node_modules', 'saml', 'lib', 'saml20.js');
 
   restoreFile(assertionTemplatePath);
   restoreFile(responseTemplatePath);
+  restoreFile(logoutResponseTemplatePath);
   restoreFile(saml20LogicPath);
 };
 
@@ -49,10 +51,12 @@ const replaceForSamlp2 = () => {
   
   const assertionTemplatePath = path.join('node_modules', 'saml', 'lib', 'saml20.template');
   const responseTemplatePath = path.join('node_modules', 'samlp', 'templates', 'samlresponse.ejs');
+  const logoutResponseTemplatePath = path.join('node_modules', 'samlp', 'templates', 'logoutresponse.ejs');
   const saml20LogicPath = path.join('node_modules', 'saml', 'lib', 'saml20.js');
   
   editFile(assertionTemplatePath, editTemplateForSamlNamespace);
   editFile(responseTemplatePath, editTemplateForSamlNamespace, true);
+  editFile(logoutResponseTemplatePath, editTemplateForSamlNamespace, true);
   editFile(saml20LogicPath, (src) => {
     let edit = src;
     edit = edit.replaceAll('saml:', 'saml2:');
