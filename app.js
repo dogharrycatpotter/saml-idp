@@ -667,9 +667,11 @@ function _runServer(argv) {
 
   const getParticipant = function(req) {
     let serviceProviderLogoutURL = req.idp.options.sloUrl;
-    const referer = req.headers.referer;
-    if (referer) {
-      serviceProviderLogoutURL = new URL(referer).origin + new URL(serviceProviderLogoutURL).pathname;
+    const returnPort = req.query.returnPort;
+    if (returnPort) {
+      const url = new URL(serviceProviderLogoutURL);
+      url.port = returnPort;
+      serviceProviderLogoutURL = url.toString();
     }
     return {
       serviceProviderId: req.idp.options.serviceProviderId,
