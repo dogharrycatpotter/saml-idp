@@ -697,7 +697,8 @@ function _runServer(argv) {
       key:                    req.idp.options.key,
       digestAlgorithm:        req.idp.options.digestAlgorithm,
       signatureAlgorithm:     req.idp.options.signatureAlgorithm,
-      ...(req.method === 'GET' ? {protocolBinding: 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect', deflate: true } : {}),
+      ...(req.method === 'GET' ? { protocolBinding: 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect', deflate: true } : {}),
+      ...(req.query.returnStatusMessage ? { samlStatusMessage: req.query.returnStatusMessage }: {}),
       sessionParticipants:    new SessionParticipants(
       [
         req.participant
@@ -705,6 +706,10 @@ function _runServer(argv) {
       clearIdPSession: function(callback) {
         console.log('Destroying session ' + req.session.id + ' for participant', req.participant);
         req.session.destroy();
+        if (req.query.isReturnSuccess === 'false') {
+          callback(new Error());
+          return;
+        }
         callback();
       }
     })(req, res, next);
