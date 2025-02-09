@@ -227,6 +227,11 @@ function processArgs(args, options) {
         required: false,
         alias: 'slo'
       },
+      sloSpEndUrl: {
+        description: 'SP Single Logout End Return URL',
+        required: false,
+        alias: 'sloSpEnd'
+      },
       audience: {
         description: 'SP Audience URI',
         required: true,
@@ -435,6 +440,8 @@ function _runServer(argv) {
       {cyan ${argv.acsUrl || UNDEFINED_VALUE}}
     SLO URL:
       {cyan ${argv.sloUrl || UNDEFINED_VALUE}}
+    SLO SP END URL:
+      {cyan ${argv.sloSpEndUrl || UNDEFINED_VALUE}}
     Trust ACS URL in Request:
       {cyan ${!argv.disableRequestAcsUrl}}
   `));
@@ -454,6 +461,7 @@ function _runServer(argv) {
     destination:            argv.acsUrl,
     acsUrl:                 argv.acsUrl,
     sloUrl:                 argv.sloUrl,
+    sloSpEndUrl:            argv.sloSpEndUrl,
     RelayState:             argv.relayState,
     allowRequestAcsUrl:     !argv.disableRequestAcsUrl,
     digestAlgorithm:        'sha256',
@@ -689,7 +697,24 @@ function _runServer(argv) {
       });
     };
 
-    console.log('Processing SAML SLO request for participant => \n', req.participant);
+    let otherParticipant;
+    if (req.query.isOtherParticipant === 'true') {
+      let sloSpEndUrl = req.idp.options.sloSpEndUrl;
+      if (sloSpEndUrl) {
+        const returnPort = req.query.returnPort;
+        if (returnPort) {
+          const url = new URL(sloSpEndUrl);
+          url.port = returnPort;
+          sloSpEndUrl = url.toString();
+        }
+        otherParticipant = { ...req.participant, serviceProviderLogoutURL: sloSpEndUrl };
+        console.log('Processing SAML SLO request for other participant => \n', otherParticipant);
+      }
+    }
+
+    if (!otherParticipant) {
+      console.log('Processing SAML SLO request for participant => \n', req.participant);
+    }
 
     return samlp.logout({
       issuer:                 req.idp.options.issuer,
@@ -701,7 +726,8 @@ function _runServer(argv) {
       ...(req.query.returnStatusMessage ? { samlStatusMessage: req.query.returnStatusMessage }: {}),
       sessionParticipants:    new SessionParticipants(
       [
-        req.participant
+        req.participant,
+        ...(otherParticipant ? [otherParticipant] : [])
       ]),
       clearIdPSession: function(callback) {
         console.log('Destroying session ' + req.session.id + ' for participant', req.participant);
